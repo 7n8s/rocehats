@@ -1,0 +1,37 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up MinGW-w64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc
+
+      - name: Build
+        shell: msys2 {0}
+        run: |
+          export PATH=/mingw64/bin:$PATH
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: RoCheatsMonitor-Windows-x64
+          path: RoCheatsMonitor.exe
+          if-no-files-found: error
