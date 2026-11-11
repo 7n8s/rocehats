@@ -1199,7 +1199,7 @@ static void DrawShapes(int clientW, int clientH) {
         const int cy = (c.top + c.bottom) / 2;
         if (i == CELL_INTERVAL) {
             DrawChevron(c.right - S(12) - S(8), cy, hot ? C_TEXT : C_TEXT2);
-        } else {
+        } else if (i <= CELL_AUTOSTART) {
             const bool dim = i == CELL_SOUND && !g_set.notifications;
             DrawToggle(c.right - S(12) - S(32), cy - S(18) / 2, CellState(i), dim);
         }
@@ -1655,7 +1655,7 @@ static void ChooseBackground() {
     ZeroMemory(&ofn, sizeof ofn);
     ofn.lStructSize = sizeof ofn;
     ofn.hwndOwner = g_hwnd;
-    ofn.lpstrFilter = L"Image files (*.png;*.jpg;*.jpeg;*.bmp)\\0*.png;*.jpg;*.jpeg;*.bmp\\0All files (*.*)\\0*.*\\0";
+    ofn.lpstrFilter = L"Image files (*.png;*.jpg;*.jpeg;*.bmp)\0*.png;*.jpg;*.jpeg;*.bmp\0All files (*.*)\0*.*\0";
     ofn.lpstrFile = path;
     ofn.nMaxFile = MAX_PATH;
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
