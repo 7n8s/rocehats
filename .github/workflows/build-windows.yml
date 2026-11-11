@@ -27,7 +27,7 @@ jobs:
         run: |
           export PATH=/mingw64/bin:$PATH
           chmod +x build.sh
-          ./build.sh
+          CXX=g++ WINDRES=windres ./build.sh
 
       - name: Upload EXE
         uses: actions/upload-artifact@v4
