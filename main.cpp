@@ -18,6 +18,8 @@
 #include <vector>
 
 #include <windows.h>
+#include <commdlg.h>
+#include <gdiplus.h>
 #include <windowsx.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -77,7 +79,7 @@ enum : UINT_PTR { TIMER_POLL = 1, TIMER_TRAY = 2 };
 enum { TRAY_ID = 1 };
 enum { ID_OPEN = 1001, ID_CHECK, ID_TEST, ID_EXIT, ID_INTERVAL_BASE = 2000 };
 enum { HIT_NONE = 0, HIT_REFRESH = 1, HIT_CELL0 = 10, HIT_BELL0 = 100 };
-enum { CELL_INTERVAL = 0, CELL_NOTIFY, CELL_SOUND, CELL_AUTOSTART, CELL_COUNT };
+enum { CELL_INTERVAL = 0, CELL_NOTIFY, CELL_SOUND, CELL_AUTOSTART, CELL_BG_BROWSE, CELL_BG_CLEAR, CELL_COUNT };
 
 // Palette: dark charcoal, one blue accent.
 static const COLORREF C_BG         = RGB(0x0F, 0x10, 0x18);
@@ -115,6 +117,7 @@ struct Settings {
     bool sound = true;
     bool trayHintShown = false;
     std::wstring apiUrl;    // optional override, tried before the built-in URLs
+    std::wstring backgroundPath;
 };
 
 struct Layout {
@@ -158,6 +161,8 @@ static Layout g_L;
 static Settings g_set;
 static std::vector<Product> g_products;
 static std::wstring g_iniPath;
+static ULONG_PTR g_gdiplusToken = 0;
+static Gdiplus::Image* g_bgImage = nullptr;
 
 static HFONT g_fTitle = nullptr, g_fSub = nullptr, g_fName = nullptr, g_fSmall = nullptr;
 static HFONT g_fStatus = nullptr, g_fCaps = nullptr, g_fCell = nullptr, g_fCellVal = nullptr;
@@ -335,6 +340,7 @@ static void LoadSettings() {
     g_set.sound = IniGetInt(sec, L"Sound", 1) != 0;
     g_set.trayHintShown = IniGetInt(sec, L"TrayHintShown", 0) != 0;
     g_set.apiUrl = Trim(IniGet(sec, L"ApiUrl"));
+    g_set.backgroundPath = Trim(IniGet(sec, L"BackgroundImage"));
     g_savedX = IniGetInt(L"Window", L"X", INT_MIN);
     g_savedY = IniGetInt(L"Window", L"Y", INT_MIN);
 
@@ -624,9 +630,9 @@ static void ComputeLayout() {
         const int col = i % 2, row = i / 2;
         const int x = L.listX + col * (cellW + gap);
         const int y = cellsY + row * (cellH + gap);
-        SetRect(&L.cells[i], x, y, col == 1 ? L.listX + L.listW : x + cellW, y + cellH);
+        SetRect(&L.cells[i], x, y, x + cellW, y + cellH);
     }
-    L.H = cellsY + 2 * cellH + gap + S(24);
+    L.H = cellsY + 3 * cellH + 2 * gap + S(24);
 
     const int bs = S(30);
     SetRect(&L.refresh, L.W - L.pad - bs, S(27), L.W - L.pad, S(27) + bs);
@@ -1039,7 +1045,7 @@ static void DrawCard(int x, int y, int w, int h, int radius, COLORREF fill) {
     FillRoundRect((float)x, (float)y, (float)w, (float)h, r,
                   MakeInk(RGB(0x66, 0x63, 0xA0), 0.42f));
     FillRoundRect((float)(x + bw), (float)(y + bw), (float)(w - 2 * bw), (float)(h - 2 * bw),
-                  (float)(radius - bw), MakeInk(fill));
+                  (float)(radius - bw), MakeInk(fill, 0.76f));
 
     // Top-edge reflection and a faint inner sheen, like the mouse app's panels.
     FillRoundRect((float)(x + S(2)), (float)(y + S(1)), (float)(w - S(4)), (float)S(1),
@@ -1138,7 +1144,15 @@ static void DrawShapes(int clientW, int clientH) {
     const int n = (int)g_products.size();
     const int bw = Max(1, S(1));
 
-    FillRectPx(0, 0, clientW, clientH, C_BG);
+    if (g_bgImage && g_bgImage->GetLastStatus() == Gdiplus::Ok) {
+        Gdiplus::Graphics bg(g_cv.dc);
+        bg.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+        bg.DrawImage(g_bgImage, 0, 0, clientW, clientH);
+        Gdiplus::SolidBrush tint(Gdiplus::Color(150, 10, 12, 22));
+        bg.FillRectangle(&tint, 0, 0, clientW, clientH);
+    } else {
+        FillRectPx(0, 0, clientW, clientH, C_BG);
+    }
 
     // Subtle violet ambient light behind the glass surfaces.
     FillCircle((float)clientW * 0.82f, (float)S(34), (float)S(150),
@@ -1257,7 +1271,7 @@ static void DrawTexts(HDC dc) {
 
     // Settings cells
     static const wchar_t* const labels[CELL_COUNT] = { L"Check every", L"Notifications", L"Sound",
-                                                       L"Start with Windows" };
+        L"Start with Windows", L"Choose background image", L"Clear background" };
     for (int i = 0; i < CELL_COUNT; ++i) {
         const RECT& c = L.cells[i];
         const bool hot = g_hot == HIT_CELL0 + i;
@@ -1267,6 +1281,10 @@ static void DrawTexts(HDC dc) {
         if (i == CELL_INTERVAL)
             DrawTextIn(dc, g_fCellVal, C_TEXT, c.left + S(12), c.top, c.right - S(12) - S(8) - S(7),
                        c.bottom, IntervalShort(g_set.intervalMin), DT_RIGHT);
+        else if (i == CELL_BG_BROWSE || i == CELL_BG_CLEAR)
+            DrawTextIn(dc, g_fCellVal, i == CELL_BG_BROWSE ? C_ACCENT : C_TEXT2,
+                       c.left + S(12), c.top, c.right - S(12), c.bottom,
+                       i == CELL_BG_BROWSE ? L"Browse..." : L"Reset", DT_RIGHT);
     }
 }
 
@@ -1631,6 +1649,39 @@ static void OnTrayMessage(WPARAM wParam, LPARAM lParam) {
     }
 }
 
+static void ChooseBackground() {
+    wchar_t path[MAX_PATH] = L"";
+    OPENFILENAMEW ofn;
+    ZeroMemory(&ofn, sizeof ofn);
+    ofn.lStructSize = sizeof ofn;
+    ofn.hwndOwner = g_hwnd;
+    ofn.lpstrFilter = L"Image files (*.png;*.jpg;*.jpeg;*.bmp)\\0*.png;*.jpg;*.jpeg;*.bmp\\0All files (*.*)\\0*.*\\0";
+    ofn.lpstrFile = path;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+    if (!GetOpenFileNameW(&ofn)) return;
+    Gdiplus::Image* candidate = new Gdiplus::Image(path);
+    if (candidate->GetLastStatus() != Gdiplus::Ok) {
+        delete candidate;
+        MessageBoxW(g_hwnd, L"That image could not be loaded. Try a PNG, JPG or BMP file.",
+                    APP_NAME, MB_ICONWARNING | MB_OK);
+        return;
+    }
+    delete g_bgImage;
+    g_bgImage = candidate;
+    g_set.backgroundPath = path;
+    IniSet(L"Settings", L"BackgroundImage", g_set.backgroundPath);
+    InvalidateRect(g_hwnd, nullptr, FALSE);
+}
+
+static void ClearBackground() {
+    delete g_bgImage;
+    g_bgImage = nullptr;
+    g_set.backgroundPath.clear();
+    IniSet(L"Settings", L"BackgroundImage", L"");
+    InvalidateRect(g_hwnd, nullptr, FALSE);
+}
+
 static void Activate(int hit) {
     if (hit == HIT_REFRESH) {
         ManualCheck();
@@ -1645,6 +1696,10 @@ static void Activate(int hit) {
     } else if (hit == HIT_CELL0 + CELL_AUTOSTART) {
         const bool want = !g_autostart;
         if (SetAutostart(want)) g_autostart = want;
+    } else if (hit == HIT_CELL0 + CELL_BG_BROWSE) {
+        ChooseBackground();
+    } else if (hit == HIT_CELL0 + CELL_BG_CLEAR) {
+        ClearBackground();
     } else if (hit >= HIT_BELL0 && hit < HIT_BELL0 + (int)g_products.size()) {
         Product& p = g_products[hit - HIT_BELL0];
         p.notify = !p.notify;
@@ -1826,6 +1881,10 @@ static void StyleTitleBar(HWND hwnd) {
     if (!setAttr) return;
     const BOOL dark = TRUE;
     if (FAILED(setAttr(hwnd, 20, &dark, sizeof dark))) setAttr(hwnd, 19, &dark, sizeof dark);
+    const int backdrop = 3; // Windows 11 transient acrylic backdrop
+    const int corners = 2;  // rounded window corners
+    setAttr(hwnd, 38, &backdrop, sizeof backdrop);
+    setAttr(hwnd, 33, &corners, sizeof corners);
     const COLORREF caption = C_BG, border = C_LINE, text = C_CAPTION_TX;
     setAttr(hwnd, 35, &caption, sizeof caption);  // DWMWA_CAPTION_COLOR
     setAttr(hwnd, 34, &border, sizeof border);    // DWMWA_BORDER_COLOR
@@ -1857,8 +1916,19 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdLine, int) {
 
     EnableDarkMenus();
 
+    Gdiplus::GdiplusStartupInput gdiplusInput;
+    if (Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusInput, nullptr) != Gdiplus::Ok)
+        g_gdiplusToken = 0;
+
     InitIniPath();
     LoadSettings();
+    if (g_gdiplusToken && !g_set.backgroundPath.empty()) {
+        g_bgImage = new Gdiplus::Image(g_set.backgroundPath.c_str());
+        if (g_bgImage->GetLastStatus() != Gdiplus::Ok) {
+            delete g_bgImage;
+            g_bgImage = nullptr;
+        }
+    }
     g_autostart = AutostartEnabled();
     if (g_autostart) SetAutostart(true);  // keep the path current if the exe was moved
 
@@ -1915,6 +1985,8 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE, PWSTR cmdLine, int) {
     if (g_iconLarge) DestroyIcon(g_iconLarge);
     if (g_iconSmall) DestroyIcon(g_iconSmall);
     FreeCanvas();
+    delete g_bgImage;
+    if (g_gdiplusToken) Gdiplus::GdiplusShutdown(g_gdiplusToken);
     if (mutex) CloseHandle(mutex);
     return 0;
 }
