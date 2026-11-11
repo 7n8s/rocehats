@@ -80,17 +80,17 @@ enum { HIT_NONE = 0, HIT_REFRESH = 1, HIT_CELL0 = 10, HIT_BELL0 = 100 };
 enum { CELL_INTERVAL = 0, CELL_NOTIFY, CELL_SOUND, CELL_AUTOSTART, CELL_COUNT };
 
 // Palette: dark charcoal, one blue accent.
-static const COLORREF C_BG         = RGB(0x13, 0x14, 0x17);
-static const COLORREF C_CARD       = RGB(0x1B, 0x1C, 0x21);
-static const COLORREF C_CARD_HOT   = RGB(0x25, 0x27, 0x2E);
-static const COLORREF C_LINE       = RGB(0x2A, 0x2C, 0x33);
+static const COLORREF C_BG         = RGB(0x0F, 0x10, 0x18);
+static const COLORREF C_CARD       = RGB(0x19, 0x1A, 0x27);
+static const COLORREF C_CARD_HOT   = RGB(0x27, 0x28, 0x3A);
+static const COLORREF C_LINE       = RGB(0x343448);
 static const COLORREF C_TEXT       = RGB(0xEC, 0xED, 0xEF);
-static const COLORREF C_TEXT2      = RGB(0x9B, 0x9F, 0xA9);
-static const COLORREF C_TEXT3      = RGB(0x62, 0x66, 0x70);
-static const COLORREF C_ACCENT     = RGB(0x4C, 0x8D, 0xFF);
-static const COLORREF C_GREEN      = RGB(0x3F, 0xCF, 0x8E);
-static const COLORREF C_RED        = RGB(0xF0, 0x61, 0x6D);
-static const COLORREF C_AMBER      = RGB(0xE8, 0xA5, 0x3A);
+static const COLORREF C_TEXT2      = RGB(0xA5, 0xA6, 0xB8);
+static const COLORREF C_TEXT3      = RGB(0x6E, 0x70, 0x86);
+static const COLORREF C_ACCENT     = RGB(0x8B, 0x78, 0xFF);
+static const COLORREF C_GREEN      = RGB(0x55, 0xD6, 0xA5);
+static const COLORREF C_RED        = RGB(0xFF, 0x6B, 0x83);
+static const COLORREF C_AMBER      = RGB(0xF0, 0xB6, 0x65);
 static const COLORREF C_TOGGLE_OFF = RGB(0x3A, 0x3D, 0x46);
 static const COLORREF C_KNOB_OFF   = RGB(0xB4, 0xB8, 0xC1);
 static const COLORREF C_WHITE      = RGB(0xFF, 0xFF, 0xFF);
@@ -580,8 +580,8 @@ static std::wstring Subline(COLORREF& color) {
         color = C_AMBER;
         return g_failText + L" \u00B7 retrying in " + RetryText(g_retrySec);
     }
-    if (!g_lastChecked.empty()) return L"Checked " + g_lastChecked + L" \u00B7 data from WEAO";
-    return L"Data from WEAO";
+    if (!g_lastChecked.empty()) return Summary() + L"  \u00B7  Checked " + g_lastChecked + L"  \u00B7  WEAO";
+    return Summary() + L"  \u00B7  Live status from WEAO";
 }
 
 struct RowView {
@@ -610,15 +610,15 @@ static RowView ViewOf(const Product& p) {
 static void ComputeLayout() {
     Layout& L = g_L;
     const int n = (int)g_products.size();
-    L.W = S(460);
-    L.pad = S(20);
+    L.W = S(520);
+    L.pad = S(24);
     L.listX = L.pad;
     L.listW = L.W - 2 * L.pad;
-    L.listY = S(96);
-    L.rowH = S(36);
+    L.listY = S(108);
+    L.rowH = S(40);
 
-    const int cellH = S(36), gap = S(8);
-    const int cellsY = L.listY + n * L.rowH + S(14);
+    const int cellH = S(42), gap = S(10);
+    const int cellsY = L.listY + n * L.rowH + S(18);
     const int cellW = (L.listW - gap) / 2;
     for (int i = 0; i < CELL_COUNT; ++i) {
         const int col = i % 2, row = i / 2;
@@ -626,7 +626,7 @@ static void ComputeLayout() {
         const int y = cellsY + row * (cellH + gap);
         SetRect(&L.cells[i], x, y, col == 1 ? L.listX + L.listW : x + cellW, y + cellH);
     }
-    L.H = cellsY + 2 * cellH + gap + S(20);
+    L.H = cellsY + 2 * cellH + gap + S(24);
 
     const int bs = S(30);
     SetRect(&L.refresh, L.W - L.pad - bs, S(27), L.W - L.pad, S(27) + bs);
@@ -704,11 +704,11 @@ static void RebuildFonts() {
         if (*f) DeleteObject(*f);
         *f = nullptr;
     }
-    g_fTitle   = MakeFont(17, true);
-    g_fSub     = MakeFont(12, false);
-    g_fName    = MakeFont(13, true);
+    g_fTitle   = MakeFont(19, true);
+    g_fSub     = MakeFont(12.5, false);
+    g_fName    = MakeFont(13.5, true);
     g_fSmall   = MakeFont(12, false);
-    g_fStatus  = MakeFont(12, true);
+    g_fStatus  = MakeFont(12.5, true);
     g_fCaps    = MakeFont(10, true);
     g_fCell    = MakeFont(12, false);
     g_fCellVal = MakeFont(12, true);
@@ -1201,18 +1201,18 @@ static void DrawTexts(HDC dc) {
     COLORREF subColor = C_TEXT2;
     const std::wstring sub = Subline(subColor);
     const int headRight = L.refresh.left - S(12);
-    DrawTextIn(dc, g_fTitle, C_TEXT, L.pad, S(18), headRight, S(44), Summary(), DT_LEFT | DT_END_ELLIPSIS);
-    DrawTextIn(dc, g_fSub, subColor, L.pad, S(44), headRight, S(64), sub, DT_LEFT | DT_END_ELLIPSIS);
+    DrawTextIn(dc, g_fTitle, C_TEXT, L.pad, S(22), headRight, S(48), L"RoCheats Monitor", DT_LEFT | DT_END_ELLIPSIS);
+    DrawTextIn(dc, g_fSub, subColor, L.pad, S(49), headRight, S(69), sub, DT_LEFT | DT_END_ELLIPSIS);
 
     // Columns
     const int statusR = L.listX + L.listW - S(42);
-    const int statusL = statusR - S(92);
+    const int statusL = statusR - S(104);
     const int detectR = statusL - S(4);
-    const int detectL = detectR - S(84);
+    const int detectL = detectR - S(94);
     const int nameL = L.listX + S(32);
     const int nameR = detectL - S(8);
 
-    const int capsT = S(74), capsB = S(92);
+    const int capsT = S(84), capsB = S(104);
     SetTextCharacterExtra(dc, S(0.7));
     DrawTextIn(dc, g_fCaps, C_TEXT3, L.listX + S(14), capsT, detectL, capsB, L"PRODUCT", DT_LEFT);
     DrawTextIn(dc, g_fCaps, C_TEXT3, detectL - S(20), capsT, detectR, capsB, L"DETECTION", DT_RIGHT);
