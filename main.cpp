@@ -1031,9 +1031,21 @@ static void AddBezier(std::vector<Pt>& out, Pt p0, Pt c1, Pt c2, Pt p3, int step
 // Rounded card with a hairline border.
 static void DrawCard(int x, int y, int w, int h, int radius, COLORREF fill) {
     const int bw = Max(1, S(1));
-    FillRoundRect((float)x, (float)y, (float)w, (float)h, (float)radius, MakeInk(C_LINE));
+    const float r = (float)radius;
+
+    // Soft depth, glass edge and a restrained specular highlight.
+    FillRoundRect((float)x, (float)(y + S(3)), (float)w, (float)h, r,
+                  MakeInk(RGB(0x00, 0x00, 0x00), 0.34f));
+    FillRoundRect((float)x, (float)y, (float)w, (float)h, r,
+                  MakeInk(RGB(0x66, 0x63, 0xA0), 0.42f));
     FillRoundRect((float)(x + bw), (float)(y + bw), (float)(w - 2 * bw), (float)(h - 2 * bw),
                   (float)(radius - bw), MakeInk(fill));
+
+    // Top-edge reflection and a faint inner sheen, like the mouse app's panels.
+    FillRoundRect((float)(x + S(2)), (float)(y + S(1)), (float)(w - S(4)), (float)S(1),
+                  (float)S(1), MakeInk(C_WHITE, 0.13f));
+    FillRoundRect((float)(x + S(2)), (float)(y + S(2)), (float)(w - S(4)), (float)S(7),
+                  (float)S(4), MakeInk(C_WHITE, 0.025f));
 }
 
 // Circular arrow.
@@ -1127,6 +1139,12 @@ static void DrawShapes(int clientW, int clientH) {
     const int bw = Max(1, S(1));
 
     FillRectPx(0, 0, clientW, clientH, C_BG);
+
+    // Subtle violet ambient light behind the glass surfaces.
+    FillCircle((float)clientW * 0.82f, (float)S(34), (float)S(150),
+               MakeInk(C_ACCENT, 0.055f));
+    FillCircle((float)S(28), (float)clientH * 0.76f, (float)S(110),
+               MakeInk(RGB(0x4B, 0x70, 0xC8), 0.035f));
 
     // Refresh button
     {
