@@ -9,14 +9,14 @@ CXX="${CXX:-x86_64-w64-mingw32-g++}"
 WINDRES="${WINDRES:-x86_64-w64-mingw32-windres}"
 
 mkdir -p obj
-[ -f res/app.ico ] || python3 tools/make_icon.py res/app.ico
+[ -f app.ico ] || { echo "Missing app.ico"; exit 1; }
 
-(cd res && "$WINDRES" -i app.rc -O coff -o ../obj/app.res.o)
+"$WINDRES" -i app.rc -O coff -o obj/app.res.o
 
 "$CXX" -std=c++17 -O2 -Wall -Wextra \
     -municode -mwindows -static -s \
     -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0A00 \
-    src/main.cpp obj/app.res.o \
+    main.cpp obj/app.res.o \
     -o RoCheatsMonitor.exe \
     -lwinhttp -lshell32 -ladvapi32 -luser32 -lgdi32
 
