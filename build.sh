@@ -18,6 +18,6 @@ mkdir -p obj
     -DUNICODE -D_UNICODE -D_WIN32_WINNT=0x0A00 \
     main.cpp obj/app.res.o \
     -o RoCheatsMonitor.exe \
-    -lwinhttp -lshell32 -ladvapi32 -luser32 -lgdi32
+    -lwinhttp -lshell32 -ladvapi32 -luser32 -lgdi32 -lcomdlg32 -lgdiplus
 
 ls -l RoCheatsMonitor.exe
